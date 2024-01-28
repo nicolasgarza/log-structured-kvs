@@ -1,4 +1,5 @@
 use clap::{command, Arg};
+use std::path::Path;
 
 use rust_kv_store::{KeyValueStore, run};
 
@@ -16,7 +17,8 @@ fn main() {
             .help("value to insert into kv store"))
         .get_matches();
 
-    let mut kv_store = KeyValueStore::new();
+    let path = Path::new("data/data.json");
+    let mut kv_store = KeyValueStore::load_from_file(path).unwrap();
     let kv_command = matches.get_one::<String>("command").unwrap().to_string();
     let kv_key = matches.get_one::<String>("key").cloned();
     let kv_value = matches.get_one::<String>("value").cloned();
@@ -28,7 +30,9 @@ fn main() {
     match res {
         Ok(response) => {
             println!("{:?}", response);
-            println!("{:?}", kv_store)
+            if let Err(e) = KeyValueStore::save(&kv_store, path) {
+                println!("Failed to save data: {}", e);
+            }
     },
         Err(e) => println!("Operation encountered error: {}", e)
     }
