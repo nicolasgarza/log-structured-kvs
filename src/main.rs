@@ -17,14 +17,19 @@ fn main() {
         .get_matches();
 
     let mut kv_store = KeyValueStore::new();
+    let kv_command = matches.get_one::<String>("command").unwrap().to_string();
+    let kv_key = matches.get_one::<String>("key").cloned();
+    let kv_value = matches.get_one::<String>("value").cloned();
     let res = run(&mut kv_store,
-                  matches.get_one::<String>("command").unwrap().to_string(),
-                    (&matches.get_one::<String>("key").cloned(),
-                    &matches.get_one::<String>("value").cloned())
+                    kv_command,
+                    (&kv_key, &kv_value)
     );
 
     match res {
-        Ok(()) => println!("{:?}", kv_store),
+        Ok(response) => {
+            println!("{:?}", response);
+            println!("{:?}", kv_store)
+    },
         Err(e) => println!("Operation encountered error: {}", e)
     }
 }
