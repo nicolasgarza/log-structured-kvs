@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::net::{TcpListener, TcpStream};
 use std::fs::{self, File};
 use std::io::{self, Read};
+use std::io::prelude::*;
 use std::path::Path;
 
 
@@ -106,17 +107,38 @@ pub fn run(store: &mut KeyValueStore,
 
 fn handle_client(mut stream: TcpStream, store: &mut KeyValueStore) {
     let mut buffer = [0; 1024];
-    while match stream.read(&mut buffer) {
+    match stream.read(&mut buffer) {
         Ok(size) => {
-            let request = std::str::from_utf8(&buffer[..size]).unwrap();
-            let parts: Vec<&str> = request.split(" ").collect();
+            let request = match std::str::from_utf8(&buffer[..size]) {
+                Ok(req) => req,
+                Err(_) => {
+                    eprintln!("Invalid request");
+                    return;
+                }
+            };
+            let parts: Vec<&str> = request.trim().split_whitespace().collect();
+            if parts.len() < 2 {
+                eprintln!("Invalid request: {}", request);
+                return;
+            }
 
-            let _ = store.process(String::from(parts[0]), (&Some(parts[1]), &Some(parts[2])));
-            true
+            let command = parts[0];
+            let key = parts.get(1).copied();
+            let value = parts.get(2).copied();
+            let path = Path::new("data/data.json");
+
+            let response = match store.process(command.to_string(), (&key, &value)) {
+                Ok(msg) => {
+                    let _ = KeyValueStore::save(&store, path);
+                    msg
+                },
+                Err(e) => e.to_string(),
+            };
+
+            let _ = stream.write_all(response.as_bytes());
         },
-        Err(_) => {
-            println!("An error occurred, terminating connection"); 
-            false
+        Err(e) => {
+            eprintln!("Failed to read from connection: {}", e);
         },
     } {}
 }
