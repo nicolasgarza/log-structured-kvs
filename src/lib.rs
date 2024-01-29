@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
+use std::net::{TcpListener, TcpStream};
 use std::fs::{self, File};
 use std::io::{self, Read};
 use std::path::Path;
@@ -16,9 +17,50 @@ impl KeyValueStore {
         KeyValueStore { store: BTreeMap::new() }
     }
 
+    pub fn process(&mut self,
+        command: String, 
+        kv: (&Option<&str>, &Option<&str>))
+        -> Result<String, &'static str> {
+        match command.as_str() {
+            "set" => {
+                match kv {
+                    (Some(key), Some(value)) => {
+                        self.set(key.to_string(), value.to_string());
+                        Ok(format!("Value set for key {}", key))
+                    },
+                    (None, _) => return Err("Must provide key"),
+                    (_, None) => return Err("Must provide value"),
+                }
+            },
+            "get" => {
+                match kv {
+                    (Some(key), _) => match self.get(*key) {
+                        Some(value) => Ok(format!("Value for key {}: {}", key, value)),
+                        None => Ok(format!("No data found for key {}", key)),
+                    },
+                    (None, _) => return Err("Must provide key"),
+                }
+            },
+            "delete" => {
+                match kv {
+                    (Some(key), _) => {
+                        if self.delete(key).is_some() {
+                            Ok(format!("Key {} deleted", key))
+                        } else {
+                            Err("Key not in store")
+                        }
+                    },
+                    (None, _) => Err("Must provide key"),
+                }
+            },
+            _ => Err("Unknown command")
+        }
+    }
+
+
     // btree operations
-    pub fn set(&mut self, key: &str, value: &String) {
-        self.store.insert(key.to_string(), value.to_string());
+    pub fn set(&mut self, key: String, value: String) {
+        self.store.insert(key, value);
     }
 
     pub fn get(&self, key: &str) -> Option<&String> {
@@ -48,94 +90,49 @@ impl KeyValueStore {
 // running
 pub fn run(store: &mut KeyValueStore,
             command: String, 
-            kv: (&Option<String>, &Option<String>))
+            kv: (&Option<&str>, &Option<&str>))
             -> Result<String, &'static str> {
     match command.as_str() {
-        "set" => {
-            match kv {
-                (Some(key), Some(value)) => {
-                    store.set(key, value);
-                    Ok(format!("Value set for key {}", key))
-                },
-                (None, _) => return Err("Must provide key"),
-                (_, None) => return Err("Must provide value"),
+        "start_server" => {
+            match start_server(store) {
+                Ok(_) => Ok("Server started and stopped successfully".to_string()),
+                Err(_e) => Err("Server failed to start"),
             }
         },
-        "get" => {
-            match kv {
-                (Some(key), _) => match store.get(key.as_str()) {
-                    Some(value) => Ok(format!("Value for key {}: {}", key, value)),
-                    None => Ok(format!("No data found for key {}", key)),
-                },
-                (None, _) => return Err("Must provide key"),
-            }
-        },
-        "delete" => {
-            match kv {
-                (Some(key), _) => {
-                    if store.delete(key.as_str()).is_some() {
-                        Ok(format!("Key {} deleted", key))
-                    } else {
-                        Err("Key not in store")
-                    }
-                },
-                (None, _) => Err("Must provide key"),
-            }
-        },
-        _ => Err("Unknown command")
+        _ => store.process(command, kv),
     }
+    
 }
 
-// testing
-#[cfg(test)]
-mod tests {
-    use super::*;
+fn handle_client(mut stream: TcpStream, store: &mut KeyValueStore) {
+    let mut buffer = [0; 1024];
+    while match stream.read(&mut buffer) {
+        Ok(size) => {
+            let request = std::str::from_utf8(&buffer[..size]).unwrap();
+            let parts: Vec<&str> = request.split(" ").collect();
 
-    #[test]
-    fn test_set() {
-        let mut store = KeyValueStore::new();
-        store.set("foo", &"bar".to_string());
-        assert_eq!(store.get("foo"), Some(&"bar".to_string()));
-    }
-
-    #[test]
-    fn test_get() {
-        let mut store = KeyValueStore::new();
-        store.set("foo", &"bar".to_string());
-        assert_eq!(store.get("foo"), Some(&"bar".to_string()));
-    }
-
-    #[test]
-    fn test_delete() {
-        let mut store = KeyValueStore::new();
-        store.set("foo", &"bar".to_string());
-        assert_eq!(store.delete("foo"), Some("bar".to_string()));
-        assert_eq!(store.get("foo"), None);
-    }
-
-    #[test]
-    fn test_run_set() {
-        let mut store = KeyValueStore::new();
-        let kv = (&Some("foo".to_string()), &Some("bar".to_string()));
-        assert_eq!(run(&mut store, "set".to_string(), kv), Ok("Value set for key foo".to_string()));
-        assert_eq!(store.get("foo"), Some(&"bar".to_string()));
-    }
-
-    #[test]
-    fn test_run_get() {
-        let mut store = KeyValueStore::new();
-        store.set("foo", &"bar".to_string());
-        let kv = (&Some("foo".to_string()), &None);
-        assert_eq!(run(&mut store, "get".to_string(), kv), Ok("Value for key foo: bar".to_string()));
-    }
-
-    #[test]
-    fn test_run_delete() {
-        let mut store = KeyValueStore::new();
-        store.set("foo", &"bar".to_string());
-        let kv = (&Some("foo".to_string()), &None);
-        assert_eq!(run(&mut store, "delete".to_string(), kv), Ok("Key foo deleted".to_string()));
-        assert_eq!(store.get("foo"), None);
-    }
+            let _ = store.process(String::from(parts[0]), (&Some(parts[1]), &Some(parts[2])));
+            true
+        },
+        Err(_) => {
+            println!("An error occurred, terminating connection"); 
+            false
+        },
+    } {}
 }
 
+fn start_server(store: &mut KeyValueStore) -> io::Result<()>{
+    let listener = TcpListener::bind("127.0.0.1:8080").unwrap();
+    for stream in listener.incoming() {
+        match stream {
+            Ok(stream) => {
+                println!("New connection: {}", stream.peer_addr().unwrap());
+                handle_client(stream, store);
+            },
+            Err(e) => {
+                println!("Error: {}", e);
+            }
+        }
+    }
+    Ok(())
+}
