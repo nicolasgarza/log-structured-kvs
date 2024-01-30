@@ -18,12 +18,12 @@ fn main() {
         .get_matches();
 
     let path = Path::new("data/data.json");
-    let mut kv_store = KeyValueStore::load_from_file(path).unwrap();
+    let kv_store = KeyValueStore::load_from_file(path).unwrap();
     let kv_command = matches.get_one::<String>("command").unwrap().to_string();
     let kv_key = matches.get_one::<String>("key").map(|s| s.as_str());
     let kv_value = matches.get_one::<String>("value").map(|s| s.as_str());
 
-    let res = run(&mut kv_store,
+    let res = run(
                 kv_command,
                 (&kv_key, &kv_value)
 );
