@@ -3,13 +3,14 @@ use std::collections::HashMap;
 // store
 #[derive(Debug)]
 pub struct KvStore {
-    store: HashMap<String, String>
+    store: HashMap<String, String>,
 }
 
 impl KvStore {
-
     pub fn new() -> KvStore {
-        KvStore { store: HashMap::new() }
+        KvStore {
+            store: HashMap::new(),
+        }
     }
 
     // btree operations
