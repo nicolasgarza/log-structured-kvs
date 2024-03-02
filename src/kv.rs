@@ -7,6 +7,7 @@ pub struct KvStore {
 }
 
 impl KvStore {
+
     pub fn new() -> KvStore {
         KvStore { store: HashMap::new() }
     }
@@ -23,5 +24,10 @@ impl KvStore {
     pub fn remove(&mut self, key: String) {
         self.store.remove(&key);
     }
+}
 
+impl Default for KvStore {
+    fn default() -> Self {
+        Self::new()
+    }
 }
