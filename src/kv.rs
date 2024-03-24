@@ -1,5 +1,5 @@
-use std::{collections::HashMap, path::PathBuf};
-
+use std::{collections::HashMap, fs::File, io::Write, path::PathBuf};
+use serde::{Serialize, Deserialize};
 use crate::Result;
 
 // store
@@ -15,10 +15,15 @@ impl KvStore {
         }
     }
 
-    // btree operations
     pub fn set(&mut self, key: String, value: String) -> Result<()> {
+        // let cmd = Command::Set(key, value);
+        // let ser = serde_json::to_string(&cmd).unwrap();
+        // let mut file = File::create("1.log")?;
+        // file.write_all(ser.as_bytes())?;
+
+        // write to the in memory hash map:
         self.store.insert(key, value);
-        todo!()
+        Ok(())
     }
 
     pub fn get(&self, key: String) -> Result<Option<String>> {
@@ -40,4 +45,10 @@ impl Default for KvStore {
     fn default() -> Self {
         Self::new()
     }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+enum Command {
+    Set(String, String),
+    Rm(String),
 }
